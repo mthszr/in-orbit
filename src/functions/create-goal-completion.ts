@@ -3,13 +3,13 @@ import { db } from '../db'
 import { goalCompletions, goals } from '../db/schema'
 import dayjs from 'dayjs'
 
-interface CreateGoalCompletionRequest {
+interface CreateGoalCompletion {
   goalId: string
 }
 
-export async function CreateGoalCompletionRequest({
+export async function CreateGoalCompletion({
   goalId,
-}: CreateGoalCompletionRequest) {
+}: CreateGoalCompletion) {
   const firstDayOfWeek = dayjs().startOf('week').toDate()
   const lastDayOfWeek = dayjs().endOf('week').toDate()
 
@@ -23,7 +23,8 @@ export async function CreateGoalCompletionRequest({
       .where(
         and(
           gte(goalCompletions.createdAt, firstDayOfWeek),
-          lte(goalCompletions.createdAt, lastDayOfWeek)
+          lte(goalCompletions.createdAt, lastDayOfWeek),
+          eq(goalCompletions.goalId, goalId)
         )
       )
       .groupBy(goalCompletions.goalId)
@@ -39,10 +40,20 @@ export async function CreateGoalCompletionRequest({
     })
     .from(goals)
     .leftJoin(goalsCompletionCounts, eq(goalsCompletionCounts.goalId, goals.id))
+    .where(eq(goals.id, goalId))
+    .limit(1)
+  
+  const { completionCount, desiredWeeklyFrequency } = result[0]
 
-  //const result = await db.insert(goalCompletions).values({ goalId }).returning()
+  if (completionCount >= desiredWeeklyFrequency) {
+    throw new Error('Goal already completed this week!')
+  }
 
-  //const goalCompletion = result[0]
+  const insertResult = await db.insert(goalCompletions).values({ goalId }).returning()
 
-  return result
+  const goalCompletion = insertResult[0]
+
+  return {
+    goalCompletion,
+  }
 }
